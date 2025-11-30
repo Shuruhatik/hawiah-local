@@ -1,6 +1,6 @@
 {
   "name": "@hawiah/local",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Local file storage drivers for JSON and YAML with atomic writes using writerx - lightweight and fast data persistence",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -39,7 +39,7 @@
   ],
   "dependencies": {
     "js-yaml": "^4.1.1",
-    "writerx": "^1.0.3"
+    "writerx": "^1.0.7"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
