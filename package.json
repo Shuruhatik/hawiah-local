@@ -1,0 +1,50 @@
+{
+  "name": "@hawiah/local",
+  "version": "0.1.0",
+  "description": "Local file storage drivers for JSON and YAML with atomic writes using writerx - lightweight and fast data persistence",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "node test/example.js"
+  },
+  "keywords": [
+    "json",
+    "yaml",
+    "local-storage",
+    "file-storage",
+    "drivers",
+    "atomic-writes",
+    "writerx",
+    "database",
+    "schema-less",
+    "lightweight"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Shuruhatik/hawiah-local.git"
+  },
+  "homepage": "https://github.com/Shuruhatik/hawiah-local#readme",
+  "bugs": {
+    "url": "https://github.com/Shuruhatik/hawiah-local/issues"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "INSTALLATION.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "js-yaml": "^4.1.1",
+    "writerx": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
