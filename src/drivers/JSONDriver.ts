@@ -93,6 +93,7 @@ export class JSONDriver implements IDriver {
     };
 
     this.data.push(record);
+    await this.saveToFile();
 
     return record;
   }
@@ -145,6 +146,10 @@ export class JSONDriver implements IDriver {
       return record;
     });
 
+    if (count > 0) {
+      await this.saveToFile();
+    }
+
     return count;
   }
 
@@ -158,6 +163,10 @@ export class JSONDriver implements IDriver {
     const initialLength = this.data.length;
     this.data = this.data.filter(record => !this.matchesQuery(record, query));
     const count = initialLength - this.data.length;
+
+    if (count > 0) {
+      await this.saveToFile();
+    }
 
     return count;
   }
@@ -199,6 +208,7 @@ export class JSONDriver implements IDriver {
   async clear(): Promise<void> {
     this.ensureConnected();
     this.data = [];
+    await this.saveToFile();
   }
 
   /**

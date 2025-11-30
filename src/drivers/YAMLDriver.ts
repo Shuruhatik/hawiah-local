@@ -72,6 +72,10 @@ export class YAMLDriver implements IDriver {
      * @private
      */
     private async saveToFile(): Promise<void> {
+        if (this.data.length === 0) {
+            await this.writer.write('');
+            return;
+        }
         const yamlStr = yaml.dump(this.data, this.yamlOptions);
         await this.writer.write(yamlStr);
     }
@@ -93,6 +97,7 @@ export class YAMLDriver implements IDriver {
         };
 
         this.data.push(record);
+        await this.saveToFile();
 
         return record;
     }
@@ -147,6 +152,10 @@ export class YAMLDriver implements IDriver {
             }
         }
 
+        if (count > 0) {
+            await this.saveToFile();
+        }
+
         return count;
     }
 
@@ -161,6 +170,10 @@ export class YAMLDriver implements IDriver {
         const beforeLength = this.data.length;
         this.data = this.data.filter(record => !this.matchesQuery(record, query));
         const count = beforeLength - this.data.length;
+
+        if (count > 0) {
+            await this.saveToFile();
+        }
 
         return count;
     }
@@ -250,6 +263,7 @@ export class YAMLDriver implements IDriver {
     async clear(): Promise<void> {
         this.ensureConnected();
         this.data = [];
+        await this.saveToFile();
     }
 
     /**
