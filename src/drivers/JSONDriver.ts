@@ -10,17 +10,14 @@ import { IDriver, Query, Data } from '../interfaces/IDriver';
 export class JSONDriver implements IDriver {
   private records: Data[] = [];
   private writer: Writer;
-  private autoSave: boolean;
 
   /**
    * Creates a new instance of JsonDriver
    * @param filePath - Path to the JSON file
-   * @param autoSave - Whether to automatically save changes to disk (default: true)
    */
-  constructor(filePath: string, autoSave: boolean = true) {
+  constructor(filePath: string) {
     const resolvedPath = path.resolve(filePath);
     this.writer = new Writer(resolvedPath);
-    this.autoSave = autoSave;
   }
 
   /**
@@ -46,9 +43,6 @@ export class JSONDriver implements IDriver {
     } catch (error: any) {
       if (error.code === 'ENOENT') {
         this.records = [];
-        if (this.autoSave) {
-          await this.persist();
-        }
       } else {
         throw error;
       }
@@ -78,9 +72,7 @@ export class JSONDriver implements IDriver {
 
     this.records.push(record);
 
-    if (this.autoSave) {
-      await this.persist();
-    }
+
 
     return record;
   }
@@ -125,9 +117,7 @@ export class JSONDriver implements IDriver {
       return record;
     });
 
-    if (count > 0 && this.autoSave) {
-      await this.persist();
-    }
+
 
     return count;
   }
@@ -142,9 +132,7 @@ export class JSONDriver implements IDriver {
     this.records = this.records.filter(record => !this.matches(record, query));
     const count = initialLength - this.records.length;
 
-    if (count > 0 && this.autoSave) {
-      await this.persist();
-    }
+
 
     return count;
   }
@@ -188,9 +176,7 @@ export class JSONDriver implements IDriver {
    */
   async clear(): Promise<void> {
     this.records = [];
-    if (this.autoSave) {
-      await this.persist();
-    }
+
   }
 
   /**
@@ -237,8 +223,6 @@ export class JSONDriver implements IDriver {
    * For JsonDriver, this simply persists the current state.
    */
   async compact(): Promise<void> {
-    if (this.autoSave) {
-      await this.persist();
-    }
+
   }
 }

@@ -5,47 +5,25 @@ import { Writer } from 'writerx';
 import { IDriver, Query, Data } from '../interfaces/IDriver';
 
 /**
- * YAML driver configuration options
- */
-export interface YAMLDriverOptions {
-    /**
-     * Path to the YAML file
-     * Example: './data/db.yaml'
-     */
-    filename: string;
-
-    /**
-     * Auto-save after each modification (default: true)
-     */
-    autoSave?: boolean;
-
-    /**
-     * YAML dump options
-     */
-    yamlOptions?: yaml.DumpOptions;
-}
-
-/**
  * Driver implementation for YAML files.
  * Stores data in a human-readable YAML format.
  */
 export class YAMLDriver implements IDriver {
-    private filename: string;
+    private filePath: string;
     private writer: Writer;
-    private autoSave: boolean;
     private yamlOptions: yaml.DumpOptions;
     private data: Data[];
     private isConnected: boolean = false;
 
     /**
      * Creates a new instance of YAMLDriver
-     * @param options - YAML driver configuration options
+     * @param filePath - Path to the YAML file
+     * @param yamlOptions - YAML dump options
      */
-    constructor(options: YAMLDriverOptions) {
-        this.filename = options.filename;
-        this.writer = new Writer(this.filename);
-        this.autoSave = options.autoSave !== undefined ? options.autoSave : true;
-        this.yamlOptions = options.yamlOptions || {
+    constructor(filePath: string, yamlOptions?: yaml.DumpOptions) {
+        this.filePath = path.resolve(filePath);
+        this.writer = new Writer(this.filePath);
+        this.yamlOptions = yamlOptions || {
             indent: 2,
             lineWidth: 120,
             noRefs: true,
@@ -59,13 +37,13 @@ export class YAMLDriver implements IDriver {
      * Loads existing data or creates a new file.
      */
     async connect(): Promise<void> {
-        const dir = path.dirname(this.filename);
+        const dir = path.dirname(this.filePath);
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true });
         }
 
-        if (fs.existsSync(this.filename)) {
-            const content = fs.readFileSync(this.filename, 'utf8');
+        if (fs.existsSync(this.filePath)) {
+            const content = fs.readFileSync(this.filePath, 'utf8');
             try {
                 const parsed = yaml.load(content);
                 this.data = Array.isArray(parsed) ? parsed : [];
@@ -74,7 +52,6 @@ export class YAMLDriver implements IDriver {
             }
         } else {
             this.data = [];
-            await this.saveToFile();
         }
 
         this.isConnected = true;
@@ -82,12 +59,8 @@ export class YAMLDriver implements IDriver {
 
     /**
      * Disconnects from the YAML file.
-     * Saves data if autoSave is enabled.
      */
     async disconnect(): Promise<void> {
-        if (this.autoSave) {
-            await this.saveToFile();
-        }
         this.isConnected = false;
     }
 
@@ -118,9 +91,7 @@ export class YAMLDriver implements IDriver {
 
         this.data.push(record);
 
-        if (this.autoSave) {
-            await this.saveToFile();
-        }
+
 
         return record;
     }
@@ -175,9 +146,7 @@ export class YAMLDriver implements IDriver {
             }
         }
 
-        if (count > 0 && this.autoSave) {
-            await this.saveToFile();
-        }
+
 
         return count;
     }
@@ -194,9 +163,7 @@ export class YAMLDriver implements IDriver {
         this.data = this.data.filter(record => !this.matchesQuery(record, query));
         const count = beforeLength - this.data.length;
 
-        if (count > 0 && this.autoSave) {
-            await this.saveToFile();
-        }
+
 
         return count;
     }
@@ -286,7 +253,6 @@ export class YAMLDriver implements IDriver {
     async clear(): Promise<void> {
         this.ensureConnected();
         this.data = [];
-        await this.saveToFile();
     }
 
     /**
@@ -294,8 +260,8 @@ export class YAMLDriver implements IDriver {
      */
     async drop(): Promise<void> {
         this.ensureConnected();
-        if (fs.existsSync(this.filename)) {
-            fs.unlinkSync(this.filename);
+        if (fs.existsSync(this.filePath)) {
+            fs.unlinkSync(this.filePath);
         }
         this.data = [];
     }
@@ -307,8 +273,8 @@ export class YAMLDriver implements IDriver {
     async reload(): Promise<void> {
         this.ensureConnected();
 
-        if (fs.existsSync(this.filename)) {
-            const content = fs.readFileSync(this.filename, 'utf8');
+        if (fs.existsSync(this.filePath)) {
+            const content = fs.readFileSync(this.filePath, 'utf8');
             try {
                 const parsed = yaml.load(content);
                 this.data = Array.isArray(parsed) ? parsed : [];
@@ -322,23 +288,9 @@ export class YAMLDriver implements IDriver {
      * Gets the YAML file path.
      * @returns The file path
      */
-    getFilename(): string {
-        return this.filename;
+    getFilePath(): string {
+        return this.filePath;
     }
 
-    /**
-     * Checks if auto-save is enabled.
-     * @returns True if auto-save is enabled
-     */
-    isAutoSaveEnabled(): boolean {
-        return this.autoSave;
-    }
 
-    /**
-     * Enables or disables auto-save.
-     * @param enabled - Whether to enable auto-save
-     */
-    setAutoSave(enabled: boolean): void {
-        this.autoSave = enabled;
-    }
 }
