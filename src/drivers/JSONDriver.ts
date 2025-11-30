@@ -66,6 +66,7 @@ export class JSONDriver implements IDriver {
   async set(data: Data): Promise<Data> {
     const record = {
       ...data,
+      _id: data._id || this.generateId(),
       _createdAt: new Date().toISOString(),
       _updatedAt: new Date().toISOString(),
     };
@@ -224,5 +225,15 @@ export class JSONDriver implements IDriver {
    */
   async compact(): Promise<void> {
 
+  }
+
+
+  /**
+   * Generates a unique ID for records.
+   * @returns A unique string ID
+   * @private
+   */
+  private generateId(): string {
+    return `${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
   }
 }
