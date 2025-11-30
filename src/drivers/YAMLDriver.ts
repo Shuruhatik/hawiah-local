@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { Writer } from 'writerx';
@@ -38,20 +38,23 @@ export class YAMLDriver implements IDriver {
      */
     async connect(): Promise<void> {
         const dir = path.dirname(this.filePath);
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
+        await fs.mkdir(dir, { recursive: true });
 
-        if (fs.existsSync(this.filePath)) {
-            const content = fs.readFileSync(this.filePath, 'utf8');
+        try {
+            const content = await fs.readFile(this.filePath, 'utf8');
             try {
                 const parsed = yaml.load(content);
                 this.data = Array.isArray(parsed) ? parsed : [];
             } catch (error) {
                 this.data = [];
             }
-        } else {
-            this.data = [];
+        } catch (error: any) {
+            if (error.code === 'ENOENT') {
+                this.data = [];
+                await this.saveToFile();
+            } else {
+                throw error;
+            }
         }
 
         this.isConnected = true;
@@ -90,8 +93,6 @@ export class YAMLDriver implements IDriver {
         };
 
         this.data.push(record);
-
-
 
         return record;
     }
@@ -146,8 +147,6 @@ export class YAMLDriver implements IDriver {
             }
         }
 
-
-
         return count;
     }
 
@@ -162,8 +161,6 @@ export class YAMLDriver implements IDriver {
         const beforeLength = this.data.length;
         this.data = this.data.filter(record => !this.matchesQuery(record, query));
         const count = beforeLength - this.data.length;
-
-
 
         return count;
     }
@@ -260,8 +257,8 @@ export class YAMLDriver implements IDriver {
      */
     async drop(): Promise<void> {
         this.ensureConnected();
-        if (fs.existsSync(this.filePath)) {
-            fs.unlinkSync(this.filePath);
+        if (await this.fileExists()) {
+            await fs.unlink(this.filePath);
         }
         this.data = [];
     }
@@ -273,8 +270,8 @@ export class YAMLDriver implements IDriver {
     async reload(): Promise<void> {
         this.ensureConnected();
 
-        if (fs.existsSync(this.filePath)) {
-            const content = fs.readFileSync(this.filePath, 'utf8');
+        if (await this.fileExists()) {
+            const content = await fs.readFile(this.filePath, 'utf8');
             try {
                 const parsed = yaml.load(content);
                 this.data = Array.isArray(parsed) ? parsed : [];
@@ -292,5 +289,12 @@ export class YAMLDriver implements IDriver {
         return this.filePath;
     }
 
-
+    private async fileExists(): Promise<boolean> {
+        try {
+            await fs.access(this.filePath);
+            return true;
+        } catch {
+            return false;
+        }
+    }
 }

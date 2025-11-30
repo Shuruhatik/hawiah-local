@@ -8,16 +8,19 @@ import { IDriver, Query, Data } from '../interfaces/IDriver';
  * Stores data as a simple array of objects.
  */
 export class JSONDriver implements IDriver {
-  private records: Data[] = [];
+  private filePath: string;
   private writer: Writer;
+  private data: Data[] = [];
+  private isConnected: boolean = false;
 
   /**
    * Creates a new instance of JsonDriver
    * @param filePath - Path to the JSON file
    */
   constructor(filePath: string) {
-    const resolvedPath = path.resolve(filePath);
-    this.writer = new Writer(resolvedPath);
+    this.filePath = path.resolve(filePath);
+    this.writer = new Writer(this.filePath);
+    this.data = [];
   }
 
   /**
@@ -27,35 +30,51 @@ export class JSONDriver implements IDriver {
    */
   async connect(): Promise<void> {
     try {
-      const dir = path.dirname(this.writer.path.toString());
+      const dir = path.dirname(this.filePath);
       await fs.mkdir(dir, { recursive: true });
 
-      const fileContent = await fs.readFile(this.writer.path, 'utf-8');
-      const parsed = JSON.parse(fileContent);
+      // Check if file exists before reading
+      try {
+        await fs.access(this.filePath);
+        const fileContent = await fs.readFile(this.filePath, 'utf-8');
+        const parsed = JSON.parse(fileContent);
 
-      if (Array.isArray(parsed)) {
-        this.records = parsed;
-      } else if (parsed.records && typeof parsed.records === 'object') {
-        this.records = Object.values(parsed.records);
-      } else {
-        this.records = [];
+        if (Array.isArray(parsed)) {
+          this.data = parsed;
+        } else if (parsed.records && typeof parsed.records === 'object') {
+          this.data = Object.values(parsed.records);
+        } else {
+          this.data = [];
+        }
+      } catch (error: any) {
+        if (error.code === 'ENOENT') {
+          this.data = [];
+          await this.saveToFile();
+        } else {
+          throw error;
+        }
       }
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
-        this.records = [];
-      } else {
-        throw error;
-      }
+
+      this.isConnected = true;
+    } catch (error) {
+      throw error;
     }
   }
 
   /**
    * Disconnects from the database.
-   * Persists any pending changes and clears memory.
    */
   async disconnect(): Promise<void> {
-    await this.persist();
-    this.records = [];
+    this.isConnected = false;
+  }
+
+  /**
+   * Saves the data to the JSON file.
+   * @private
+   */
+  private async saveToFile(): Promise<void> {
+    const content = JSON.stringify(this.data, null, 2);
+    await this.writer.write(content);
   }
 
   /**
@@ -64,6 +83,8 @@ export class JSONDriver implements IDriver {
    * @returns The inserted record with metadata
    */
   async set(data: Data): Promise<Data> {
+    this.ensureConnected();
+
     const record = {
       ...data,
       _id: data._id || this.generateId(),
@@ -71,9 +92,7 @@ export class JSONDriver implements IDriver {
       _updatedAt: new Date().toISOString(),
     };
 
-    this.records.push(record);
-
-
+    this.data.push(record);
 
     return record;
   }
@@ -84,7 +103,13 @@ export class JSONDriver implements IDriver {
    * @returns Array of matching records
    */
   async get(query: Query): Promise<Data[]> {
-    return this.records.filter(record => this.matches(record, query));
+    this.ensureConnected();
+
+    if (Object.keys(query).length === 0) {
+      return [...this.data];
+    }
+
+    return this.data.filter(record => this.matchesQuery(record, query));
   }
 
   /**
@@ -93,7 +118,8 @@ export class JSONDriver implements IDriver {
    * @returns The first matching record or null
    */
   async getOne(query: Query): Promise<Data | null> {
-    const record = this.records.find(record => this.matches(record, query));
+    this.ensureConnected();
+    const record = this.data.find(record => this.matchesQuery(record, query));
     return record || null;
   }
 
@@ -104,10 +130,11 @@ export class JSONDriver implements IDriver {
    * @returns The number of updated records
    */
   async update(query: Query, data: Data): Promise<number> {
+    this.ensureConnected();
     let count = 0;
 
-    this.records = this.records.map(record => {
-      if (this.matches(record, query)) {
+    this.data = this.data.map(record => {
+      if (this.matchesQuery(record, query)) {
         count++;
         return {
           ...record,
@@ -118,8 +145,6 @@ export class JSONDriver implements IDriver {
       return record;
     });
 
-
-
     return count;
   }
 
@@ -129,11 +154,10 @@ export class JSONDriver implements IDriver {
    * @returns The number of deleted records
    */
   async delete(query: Query): Promise<number> {
-    const initialLength = this.records.length;
-    this.records = this.records.filter(record => !this.matches(record, query));
-    const count = initialLength - this.records.length;
-
-
+    this.ensureConnected();
+    const initialLength = this.data.length;
+    this.data = this.data.filter(record => !this.matchesQuery(record, query));
+    const count = initialLength - this.data.length;
 
     return count;
   }
@@ -144,7 +168,8 @@ export class JSONDriver implements IDriver {
    * @returns True if a match exists, false otherwise
    */
   async exists(query: Query): Promise<boolean> {
-    return this.records.some(record => this.matches(record, query));
+    this.ensureConnected();
+    return this.data.some(record => this.matchesQuery(record, query));
   }
 
   /**
@@ -153,31 +178,91 @@ export class JSONDriver implements IDriver {
    * @returns The number of matching records
    */
   async count(query: Query): Promise<number> {
-    return this.records.filter(record => this.matches(record, query)).length;
+    this.ensureConnected();
+    if (Object.keys(query).length === 0) {
+      return this.data.length;
+    }
+    return this.data.filter(record => this.matchesQuery(record, query)).length;
   }
 
   /**
-   * Persists the current in-memory data to the JSON file.
+   * Manually saves data to file.
    */
-  async persist(): Promise<void> {
-    const content = JSON.stringify(this.records, null, 2);
-    await this.writer.write(content);
-  }
-
-  /**
-   * Forces a save of the data to disk.
-   * Alias for persist().
-   */
-  async flush(): Promise<void> {
-    await this.persist();
+  async save(): Promise<void> {
+    this.ensureConnected();
+    await this.saveToFile();
   }
 
   /**
    * Clears all data from the database.
    */
   async clear(): Promise<void> {
-    this.records = [];
+    this.ensureConnected();
+    this.data = [];
+  }
 
+  /**
+   * Deletes the JSON file.
+   */
+  async drop(): Promise<void> {
+    this.ensureConnected();
+    try {
+      await fs.unlink(this.filePath);
+    } catch (error: any) {
+      if (error.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+    this.data = [];
+  }
+
+  /**
+   * Reloads data from the JSON file.
+   */
+  async reload(): Promise<void> {
+    this.ensureConnected();
+    try {
+      const fileContent = await fs.readFile(this.filePath, 'utf-8');
+      const parsed = JSON.parse(fileContent);
+      if (Array.isArray(parsed)) {
+        this.data = parsed;
+      } else {
+        this.data = [];
+      }
+    } catch (error: any) {
+      if (error.code === 'ENOENT') {
+        this.data = [];
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Gets all data in memory.
+   * @returns All records
+   */
+  getAllData(): Data[] {
+    return [...this.data];
+  }
+
+  /**
+   * Gets the JSON file path.
+   * @returns The file path
+   */
+  getFilePath(): string {
+    return this.filePath;
+  }
+
+  /**
+   * Ensures the driver is connected before executing operations.
+   * @throws Error if driver is not connected
+   * @private
+   */
+  private ensureConnected(): void {
+    if (!this.isConnected) {
+      throw new Error('Driver not connected. Call connect() first.');
+    }
   }
 
   /**
@@ -187,7 +272,7 @@ export class JSONDriver implements IDriver {
    * @param query - The query criteria
    * @returns True if the record matches, false otherwise
    */
-  private matches(record: Data, query: Query): boolean {
+  private matchesQuery(record: Data, query: Query): boolean {
     if (Object.keys(query).length === 0) {
       return true;
     }
@@ -198,7 +283,7 @@ export class JSONDriver implements IDriver {
 
       if (typeof queryValue === 'object' && queryValue !== null && !Array.isArray(queryValue)) {
         if (typeof recordValue === 'object' && recordValue !== null && !Array.isArray(recordValue)) {
-          return this.matches(recordValue, queryValue);
+          return this.matchesQuery(recordValue, queryValue);
         }
         return false;
       }
@@ -210,23 +295,6 @@ export class JSONDriver implements IDriver {
       return recordValue === queryValue;
     });
   }
-
-  /**
-   * Gets the total number of records in memory.
-   * @returns Total record count
-   */
-  getRecordCount(): number {
-    return this.records.length;
-  }
-
-  /**
-   * Compacts the database file.
-   * For JsonDriver, this simply persists the current state.
-   */
-  async compact(): Promise<void> {
-
-  }
-
 
   /**
    * Generates a unique ID for records.
